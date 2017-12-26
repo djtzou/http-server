@@ -121,10 +121,19 @@ jobQueueInitialize(JobQueue *jobQueue, unsigned int jobQueueSize)
 }
 
 
-static int
+static void
 jobQueueDestroy(JobQueue *jobQueue)
 {
+    /* Free all jobs in queue */
+    Job *head = jobQueue->head;
+    while (head != NULL) {
+        Job *tmp = head->next;
+        free(head);
+        head = tmp;
+    }
 
+    free(jobQueue);
+    return 0
 }
 
 
@@ -160,7 +169,6 @@ threadStart(void *arg)
 }
 
 static void
-
 threadDestroy(Thread *thread)
 {
 
