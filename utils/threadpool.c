@@ -1,183 +1,209 @@
+/************************************************\
+ * Based on Pithikos/C-Thread-Pool implemenation *
+ * by Johan Hanssen Seferidis                    *
+\************************************************/
 #include <pthread.h>
 #include "error_functions.h"
 #include "threadpool.h"
 
 
+/* ========================== STRUCTURES ============================ */
+
+
+/* Job */
 typedef struct {
-    void *(*job)(void *);
+    void (*function)(void *);
     void *arg;
-    Job *next;
-} Job;
+    struct job *next;
+} job;
 
+/* Job Queue */
 typedef struct {
-    pthread_mutex_t updateQueueMtx;
-    Job *head;
-    Job *tail;
-    Boolean hasJobs;
-    unsigned int numJobs;
-    unsigned int queueSize;
-} JobQueue;
+    pthread_mutex_t jobqueue_mtx;
+    job *head;
+    job *tail;
+    Boolean has_jobs;
+    unsigned int num_jobs;
+    unsigned int max_size;
+} jobqueue;
 
+/* Thread */
 typedef struct {
     int id;
-    pthread_t thread;
-    ThreadPool *threadPool;
-} Thread;
+    pthread_t pthread;
+    struct thpool *thpool;
+} thread;
 
+/* Thread Pool */
 typedef struct {
-    Thread **threads;
-    unsigned int totThreads;
-    unsigned int aliveThreads;
-    unsigned int workingThreads;
-    pthread_mutex_t threadPoolMtx;
-    pthread_cond_t threadPoolCnd;
-    JobQueue jobQueue;
-} ThreadPool;
+    thread **threads;
+    unsigned int num_alive_threads;
+    unsigned int num_working_threads;
+    pthread_mutex_t thpool_mtx;
+    pthread_cond_t thpool_cnd;
+    jobqueue jobqueue;
+} thpool;
 
 
-/** Create thread pool */
-ThreadPool *
-threadPoolCreate(unsigned int numThreads, unsigned int jobQueueSize)
+/* ========================== THREAD POOL ========================== */
+
+
+/* Create thread pool */
+thpool *
+thpool_create(unsigned int num_threads, unsigned jobqueue_size)
 {
-    if (numThreads <= 0) {
+    if (num_threads <= 0) {
         errMsg("Must specify a positive number of threads");
         return NULL;
     }
 
     /* Create the thread pool */
-    ThreadPool *threadPool;
-    threadPool = (ThreadPool *) malloc(sizeof(*threadPool));
-    if (threadPool == NULL) {
+    thpool *thpool;
+    thpool = (thpool *) malloc(sizeof(*thpool));
+    if (thpool == NULL) {
         errMsg("Failed to allocate memory for thread pool");
         return NULL;
     }
 
-    threadPool->totThreads = numThreads;
-    threadPool->aliveThreads = 0;
-    threadPool->workingThreads = 0;
+    thpool->num_alive_threads = 0;
+    thpool->num_working_threads = 0;
 
     /* Initialize the job queue */
-    if (jobQueueInitialize(&threadPool->jobQueue, jobQueueSize) == -1) {
+    if (jobqueue_init(&thpool_jobqueue, jobqueue_size) == -1) {
         errMsg("Failed to initialize the job queue");
-        free(threadPool);
+        free(thpool);
         return NULL;
     }
 
     /* Create threads in the pool */
-    threadPool->threads = (Thread **) malloc(numThreads * sizeof(*threadPool->threads));
-    if (threadPool->threads == NULL) {
-        errMsg("Failed to allocate memory for Thread structures");
-        jobQueueDestroy(&threadPool->jobQueue);
-        free(threadPool);
+    thpool->threads = (thread **) malloc(num_threads * sizeof(*thpool->threads));
+    if (thpool->threads == NULL) {
+        errMsg("Failed to allocate memory for thread structures");
+        jobqueue_destroy(&thpool->jobqueue);
+        free(thpool);
         return NULL;
     }
 
     /* Initialize thread pool mutex and condition variable */
-    if (pthread_mutex_init(&threadPool->threadPoolMtx, NULL) > 0) {
+    if (pthread_mutex_init(&thpool->thpool_mtx, NULL) > 0) {
         errMsg("Failed to initialize thread pool mutex");
         return NULL;
     }
 
-    if (pthread_cond_init(&threadPool->threadPoolCnd, NULL) > 0) {
+    if (pthread_cond_init(&thpool->thpool_cnd, NULL) > 0) {
         errMsg("Failed to initialize thread pool condition variable");
         return NULL;
     }
 
     /* Initialize threads in pool */
     int i;
-    for (i = 0; i < numThreads; i++) {
-        threadInitialize(threadPool, threadPool->threads[i], i);
+    for (i = 0; i < num_threads; i++) {
+        thread_init(thpool, thpool->threads[i], i);
     }
 
+    /* Wait for all threads to be initialized */
+    while (thpool->num_alive_threads != num_threads);
 
-
-
-
+    return thpool;
 }
 
 
+struct thpool_* thpool_init(int num_threads)
+int thpool_add_work(thpool_* thpool_p, void (*function_p)(void*), void* arg_p)
+void thpool_destroy(thpool_* thpool_p)
+int thpool_num_threads_working(thpool_* thpool_p)
+
+
+/* ========================== JOB QUEUE ========================== */
+
 
 static int
-jobQueueInitialize(JobQueue *jobQueue, unsigned int jobQueueSize)
+jobqueue_init(jobqueue *jobqueue, unsigned int jobqueue_size)
 {
-    jobQueue = (JobQueue *) malloc(sizeof(*jobQueue));
-    if (jobQueue == NULL) {
-        errMsg("Failed to allocate memory for jobQueue");
+    if (pthread_mutex_init(&(jobqueue->jobqueue_mtx), NULL) > 0) {
+        errMsg("Failed to initialize job queue mutex");
         return -1;
     }
 
-    if (pthread_mutex_init(&jobQueue->updateQueueMtx, NULL) > 0) {
-        errMsg("Failed to initialize mutex");
-        return -1;
-    }
-
-    jobQueue->head = NULL;
-    jobQueue->tail = NULL:
-    jobQueue->hasJobs = FALSE;
-    jobQueue->numJobs = 0;
-    jobQueue->queueSize = jobQueueSize;
+    jobqueue->head = NULL;
+    jobqueue->tail = NULL;
+    jobqueue->has_jobs = FALSE;
+    jobqueue->num_jobs = 0;
+    jobqueue->max_size = jobqueue_size;
 
     return 0;
 }
 
-
 static void
-jobQueueDestroy(JobQueue *jobQueue)
+jobqueue_destroy(jobqueue *jobqueue)
 {
-    /* Free all jobs in queue */
-    Job *head = jobQueue->head;
-    while (head != NULL) {
-        Job *tmp = head->next;
-        free(head);
-        head = tmp;
-    }
-
-    free(jobQueue);
-    return 0
+    jobqueue_clear(jobqueue);
+    free(jobqueue);
 }
 
+static void
+jobqueue_clear(jobqueue *jobqueue)
+{
+    while ((job = jobqueue_poll(jobqueue)) != NULL) {
+        free(job);
+    }
 
+    jobqueue->has_jobs = FALSE;
+    jobqueue->num_jobs = 0;
+    jobqueue->head = NULL;
+    jobqueue->tail = NULL;
+}
 
+static job *
+jobqueue_poll(jobqueue *jobqueue)
+{
+    pthread_mutex_lock(&jobqueue->jobqueue_mtx);
+    job *head = jobqueue->head;
+    if (jobqueue->num_jobs == 1) {
+        jobqueue->head = NULL;
+        jobqueue->tail = NULL;
+        jobqueue->num_jobs = 0;
+    }
+    else if (jobqueue->num_jobs > 1) {
+        jobqueue->head = head->next;
+        jobqueue->num_jobs--;
+    }
+    pthread_mutex_unlock(&jobqueue->jobqueue_mtx);
+
+    return head;
+}
 
 static int
-threadInitialize(ThreadPool *threadPool, Thread *thread, int id)
+jobqueue_add(jobqueue *jobqueue, job *job)
 {
-    thread = (Thread *) malloc(sizeof(*thread));
-    if (thread == NULL) {
-        errMsg("Failed to allocate memory for Thread structure");
-        return -1;
+    int ret_val = -1;
+    pthread_mutex_lock(&jobqueue->jobqueue_mtx);
+    job->next = NULL;
+    if (jobqueue->num_jobs < jobqueue->max_size)
+    {
+        if (jobqueue->head == NULL)
+        {
+            jobqueue->head = job;
+            jobqueue->tail = job;
+        }
+        else
+        {
+            jobqueue->tail->next = job;
+            jobqueue->tail = job;
+        }
+
+        jobqueue->num_jobs++;
+        retval = 0;
     }
-
-    thread->id = id;
-    thread->threadPool = threadPool;
-
-    if (pthread_create(&thread->thread, NULL, &threadStart, (void *) thread) > 0) {
-        errMsg("Failed to create a new thread");
-        return -1;
-    }
-
-    return 0;
+    pthread_mutex_unlock(&jobqueue->jobqueue_mtx);
+    return ret_val;
 }
 
 
-static void *
-threadStart(void *arg)
-{
-    Thread *thread = (Thread *) arg;
-    ThreadPool *threadPool = thread->threadPool;
-
-}
-
-static void
-threadDestroy(Thread *thread)
-{
-
-}
+/* ========================== THREAD ========================== */
 
 
 
-threadpool_add_job();
-threadpool_wait();
-threadpool_num_of_workers();
-threadpool_destroy();
-    threadpool_free();
+static int  thread_init(thpool_* thpool_p, struct thread** thread_p, int id);
+static void* thread_do(struct thread* thread_p);
+static void  thread_destroy(struct thread* thread_p);
