@@ -2,6 +2,7 @@
  * Based on Pithikos/C-Thread-Pool implemenation *
  * by Johan Hanssen Seferidis                    *
 \************************************************/
+
 #include <pthread.h>
 #include "error_functions.h"
 #include "threadpool.h"
@@ -9,33 +10,39 @@
 
 /* ========================== STRUCTURES ============================ */
 
+/* Binary Semaphore */
+typdef struct bsem {
+    pthread_mutex_t mtx;
+    pthread_cond_t cnd;
+    int val;
+} bsem;
 
 /* Job */
-typedef struct {
+typedef struct job {
     void (*function)(void *);
     void *arg;
     struct job *next;
 } job;
 
 /* Job Queue */
-typedef struct {
+typedef struct jobqueue {
     pthread_mutex_t jobqueue_mtx;
     job *head;
     job *tail;
-    Boolean has_jobs;
+    bsem *has_jobs;
     unsigned int num_jobs;
     unsigned int max_size;
 } jobqueue;
 
 /* Thread */
-typedef struct {
+typedef struct thread {
     int id;
     pthread_t pthread;
     struct thpool *thpool;
 } thread;
 
 /* Thread Pool */
-typedef struct {
+typedef struct thpool {
     thread **threads;
     unsigned int num_alive_threads;
     unsigned int num_working_threads;
@@ -50,7 +57,7 @@ typedef struct {
 
 /* Create thread pool */
 thpool *
-thpool_create(unsigned int num_threads, unsigned jobqueue_size)
+thpool_init(unsigned int num_threads, unsigned jobqueue_size)
 {
     if (num_threads <= 0) {
         errMsg("Must specify a positive number of threads");
@@ -108,7 +115,6 @@ thpool_create(unsigned int num_threads, unsigned jobqueue_size)
 }
 
 
-struct thpool_* thpool_init(int num_threads)
 int thpool_add_work(thpool_* thpool_p, void (*function_p)(void*), void* arg_p)
 void thpool_destroy(thpool_* thpool_p)
 int thpool_num_threads_working(thpool_* thpool_p)
@@ -120,8 +126,8 @@ int thpool_num_threads_working(thpool_* thpool_p)
 static int
 jobqueue_init(jobqueue *jobqueue, unsigned int jobqueue_size)
 {
-    if (pthread_mutex_init(&(jobqueue->jobqueue_mtx), NULL) > 0) {
-        errMsg("Failed to initialize job queue mutex");
+    if (pthread_mutex_init(&jobqueue->jobqueue_mtx, NULL) > 0) {
+        errMsg("jobqueue_init(): Failed to initialize job queue mutex");
         return -1;
     }
 
@@ -207,3 +213,51 @@ jobqueue_add(jobqueue *jobqueue, job *job)
 static int  thread_init(thpool_* thpool_p, struct thread** thread_p, int id);
 static void* thread_do(struct thread* thread_p);
 static void  thread_destroy(struct thread* thread_p);
+
+
+/* ========================== SYNCHRONIZATION ========================== */
+
+
+static void
+bsem_init(bsem *bsem, int val)
+{
+    if (val < 0 || val > 1) {
+        errExit("bsem_init(): Binary semaphore value must be 0 or 1");
+    }
+
+    if (pthread_mutex_init(&bsem->mtx, NULL) > 0) {
+        errMsg("bsem_init(): Failed to initialize binary semaphore mutex");
+    }
+
+    if (pthread_mutex_init(&bsem->cond, NULL) > 0) {
+        errMsg("bsem_init(): Failed to initialize binary semaphore condition variable");
+    }
+
+    bsem->val = val;
+}
+
+static void
+bsem_reset(bsem *bsem)
+{
+    bsem_init(bsem, 0);
+}
+
+static void
+bsem_post(bsem *bsem)
+{
+    pthread_mutex_lock(&bsem->mtx);
+    bsem->val = 1;
+    pthread_mutex_unlock(&bsem->mtx);
+    pthread_cond_signal(&bsem->cond);
+}
+
+static void
+bsem_wait(bsem *bsem)
+{
+    pthread_mutex_lock(&bsem->mtx);
+    while (bsem->val != 1) {
+        pthread_cond_wait(&bsem->cond, &bsem->mtx);
+    }
+    bsem->val = 0;
+    pthread_mutex_unlock(&bsem->mtx);
+}
