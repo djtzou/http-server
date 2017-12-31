@@ -1,6 +1,7 @@
 /************************************************\
  * Based on Pithikos/C-Thread-Pool implemenation *
  * by Johan Hanssen Seferidis                    *
+ * Modified by Deh-Jun Tzou                      *
 \************************************************/
 
 #include <pthread.h>
@@ -131,9 +132,20 @@ jobqueue_init(jobqueue *jobqueue, unsigned int jobqueue_size)
         return -1;
     }
 
+    jobqueue->has_jobs = (bsem *) malloc(sizeof(*jobqueue->has_jobs));
+    if (jobqueue->has_jobs == NULL) {
+        errMsg("jobqueue_init(): Failed to allocate memory for binary semaphore");
+        return -1;
+    }
+
+    if (bsem_init(jobqueue->has_jobs, 0) == -1) {
+        errMsg("jobqueue_init(): Failed to allocate memory for binary semaphore");
+        free(jobqueue->has_jobs);
+        return -1;
+    }
+
     jobqueue->head = NULL;
     jobqueue->tail = NULL;
-    jobqueue->has_jobs = FALSE;
     jobqueue->num_jobs = 0;
     jobqueue->max_size = jobqueue_size;
 
@@ -144,20 +156,26 @@ static void
 jobqueue_destroy(jobqueue *jobqueue)
 {
     jobqueue_clear(jobqueue);
-    free(jobqueue);
+    free(jobqueue->has_jobs);
 }
 
-static void
+static int
 jobqueue_clear(jobqueue *jobqueue)
 {
     while ((job = jobqueue_poll(jobqueue)) != NULL) {
         free(job);
     }
 
-    jobqueue->has_jobs = FALSE;
+    if (bsem_reset(jobqueue->has_jobs) == -1) {
+        errMsg("jobqueue_clear(): Failed to reset binary semaphore");
+        return -1;
+    }
+
     jobqueue->num_jobs = 0;
     jobqueue->head = NULL;
     jobqueue->tail = NULL;
+
+    return 0;
 }
 
 static job *
@@ -173,6 +191,7 @@ jobqueue_poll(jobqueue *jobqueue)
     else if (jobqueue->num_jobs > 1) {
         jobqueue->head = head->next;
         jobqueue->num_jobs--;
+        bsem_post(jobqueue->has_jobs);
     }
     pthread_mutex_unlock(&jobqueue->jobqueue_mtx);
 
@@ -199,9 +218,11 @@ jobqueue_add(jobqueue *jobqueue, job *job)
         }
 
         jobqueue->num_jobs++;
+        bsem_post(jobqueue->has_jobs);
         retval = 0;
     }
     pthread_mutex_unlock(&jobqueue->jobqueue_mtx);
+
     return ret_val;
 }
 
@@ -218,28 +239,33 @@ static void  thread_destroy(struct thread* thread_p);
 /* ========================== SYNCHRONIZATION ========================== */
 
 
-static void
+static int
 bsem_init(bsem *bsem, int val)
 {
     if (val < 0 || val > 1) {
-        errExit("bsem_init(): Binary semaphore value must be 0 or 1");
+        errMsg("bsem_init(): Binary semaphore value must be 0 or 1");
+        return -1;
     }
 
     if (pthread_mutex_init(&bsem->mtx, NULL) > 0) {
         errMsg("bsem_init(): Failed to initialize binary semaphore mutex");
+        return -1;
     }
 
-    if (pthread_mutex_init(&bsem->cond, NULL) > 0) {
+    if (pthread_cond_init(&bsem->cond, NULL) > 0) {
         errMsg("bsem_init(): Failed to initialize binary semaphore condition variable");
+        return -1;
     }
 
     bsem->val = val;
+
+    return 0;
 }
 
-static void
+static int
 bsem_reset(bsem *bsem)
 {
-    bsem_init(bsem, 0);
+    return bsem_init(bsem, 0);
 }
 
 static void
