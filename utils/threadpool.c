@@ -106,7 +106,7 @@ thpool_init(unsigned int num_threads, unsigned jobqueue_size)
     /* Initialize threads in pool */
     int i;
     for (i = 0; i < num_threads; i++) {
-        thread_init(thpool, thpool->threads[i], i);
+        thread_init(thpool, &thpool->threads[i], i);
     }
 
     /* Wait for all threads to be initialized */
@@ -230,10 +230,46 @@ jobqueue_add(jobqueue *jobqueue, job *job)
 /* ========================== THREAD ========================== */
 
 
+static int
+thread_init(thpool *thpool, thread **thread, int id)
+{   // Must use double pointer (thread **thread) to fill entry in thpool->threads
+    *thread = (thread *) malloc(sizeof(**thread));
+    if (*thread == NULL) {
+        errMsg("thread_init(): Failed to allocate memory for thread structure");
+        return -1;
+    }
 
-static int  thread_init(thpool_* thpool_p, struct thread** thread_p, int id);
-static void* thread_do(struct thread* thread_p);
-static void  thread_destroy(struct thread* thread_p);
+    (*thread)->id = id;
+    (*thread)->thpool = thpool;
+
+    if (pthread_create(&(*thread)->pthread, NULL, thread_start, *thread) > 0) {
+        errMsg("thread_init(): Failed to create new thread");
+        free(*thread);
+        return -1;
+    }
+
+    if (pthread_detach((*thread)->pthread) > 0) {
+        errMsg("thread_init(): Failed to detach thread");
+        free(*thread);
+        return -1;
+    }
+
+    return 0;
+}
+
+static void *
+thread_start(void *arg)
+{
+    thread *thread = (thread *) arg;
+
+}
+
+
+static void
+thread_destroy(thread *thread)
+{
+    free(thread);
+}
 
 
 /* ========================== SYNCHRONIZATION ========================== */
