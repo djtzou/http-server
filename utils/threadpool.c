@@ -9,7 +9,14 @@
 #include "threadpool.h"
 
 
+/* ========================== GLOBALS ============================ */
+
+
+static volatile int threads_keepalive;  // Must declare as volatile to prevent compiler optimization
+
+
 /* ========================== STRUCTURES ============================ */
+
 
 /* Binary Semaphore */
 typdef struct bsem {
@@ -118,6 +125,7 @@ thpool_init(unsigned int num_threads, unsigned jobqueue_size)
 
 int thpool_add_work(thpool_* thpool_p, void (*function_p)(void*), void* arg_p)
 void thpool_destroy(thpool_* thpool_p)
+void thpool_wait(thpool_* thpool_p)
 int thpool_num_threads_working(thpool_* thpool_p)
 
 
@@ -262,8 +270,51 @@ thread_start(void *arg)
 {
     thread *thread = (thread *) arg;
 
-}
+    /* Set thread name? */
 
+
+    thpool *thpool = thread->thpool;
+
+    /* Mark thread as alive */
+    pthread_mutex_lock(&thpool->thpool_mtx);
+    (thpool->num_alive_threads)++;
+    pthread_mutex_unlock(&thpool->thpool_mtx);
+
+    while (threads_keepalive) {
+
+        bsem_wait(thpool->jobqueue.has_jobs);
+
+        if (threads_keepalive) {
+
+            pthread_mutex_lock(&thpool->thpool_mtx);
+            (thpool->num_working_threads)++;
+            pthread_mutex_unlock(&thpool->thpool_mtx);
+
+            job *job = jobqueue_poll(thpool->jobqueue);
+            void (*function)(void *);
+            void *arg;
+            if (job != NULL) {
+                function = job->function;
+                arg = job->arg;
+                function(arg);
+                free(job);
+            }
+
+            pthread_mutex_lock(&thpool->thpool_mtx);
+            (thpool->num_working_threads)--;
+            if (thpool->num_working_threads == 0) {
+                pthread_cond_signal(thpool->thpool_cnd);    // Signal thpool_wait()
+            }
+            pthread_mutex_unlock(&thpool->thpool_mtx);
+        }
+    }
+
+    pthread_mutex_lock(&thpool->thpool_mtx);
+    (thpool->num_alive_threads)--;
+    pthread_mutex_unlock(&thpool->thpool_mtx);
+
+    return NULL;
+}
 
 static void
 thread_destroy(thread *thread)
