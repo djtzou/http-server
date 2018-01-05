@@ -122,11 +122,78 @@ thpool_init(unsigned int num_threads, unsigned jobqueue_size)
     return thpool;
 }
 
+int
+thpool_add_work(thpool *thpool, void (*function)(void*), void *arg)
+{
+    job *new_job
+    new_job = (job *) malloc(sizeof(*job));
+    if (new_job == NULL) {
+        errMsg("thpool_add_work(): Failed to allocate memory for new job");
+        return -1;
+    }
 
-int thpool_add_work(thpool_* thpool_p, void (*function_p)(void*), void* arg_p)
-void thpool_destroy(thpool_* thpool_p)
-void thpool_wait(thpool_* thpool_p)
-int thpool_num_threads_working(thpool_* thpool_p)
+    new_job->function = function;
+    new_job->arg = arg;
+
+    if (jobqueue_add(thpool->jobqueue, new_job) < 0) {
+        errMsg("thpool_add_work(): Failed to add new job to job queue");
+        free(new_job);
+        return -1;
+    }
+
+    return 0;
+}
+
+void
+thpool_destroy(thpool* thpool)
+{
+    if (thpool == NULL)
+        return;
+
+    /* Get total number of alive threads */
+    unsigned int total_alive_threads = thpool->num_alive_threads;
+
+    /* End infinite loop for each thread */
+    threads_keepalive = 0;
+
+    /* Wait a second for threads to terminate */
+    bsem_post_all(thpool->jobqueue.has_jobs);
+    sleep(1);
+
+    /* Terminate all remaining threads */
+    while (thpool->num_alive_threads) {
+        bsem_post_all(thpool->jobqueue.has_jobs);
+        sleep(1);
+    }
+
+    /* Destroy job queue */
+    jobqueue_destroy(&thpool->jobqueue);
+
+    /* Destroy thread structures */
+    int i;
+    for (i = 0; i < total_alive_threads; i++) {
+        thread_destroy(thpool->threads[i]);
+    }
+
+    free(thpool->threads);
+    free(thpool);
+}
+
+void
+thpool_wait(thpool *thpool)
+{
+    pthread_mutex_lock(&thpool->thpool_mtx);
+    while (thpool->jobqueue.num_jobs || thpool->num_working_threads) {
+        pthread_cond_wait(&thpool->thpool_cnd, &thpool->thpool_mtx);
+    }
+    pthread_mutex_unlock(&thpool->thpool_mtx);
+}
+
+int
+thpool_num_working_threads(thpool *thpool)
+{
+    return thpool->num_working_threads;
+}
 
 
 /* ========================== JOB QUEUE ========================== */
@@ -284,7 +351,7 @@ thread_start(void *arg)
 
         bsem_wait(thpool->jobqueue.has_jobs);
 
-        if (threads_keepalive) {
+        if (threads_keepalive) {    // Check invariant again as state may have changed
 
             pthread_mutex_lock(&thpool->thpool_mtx);
             (thpool->num_working_threads)++;
@@ -362,6 +429,15 @@ bsem_post(bsem *bsem)
     bsem->val = 1;
     pthread_mutex_unlock(&bsem->mtx);
     pthread_cond_signal(&bsem->cond);
+}
+
+static void
+bsem_post_all(bsem *bsem)
+{
+    pthread_mutex_lock(&bsem->mtx);
+    bsem->val = 1;
+    pthread_mutex_unlock(&bsem->mtx);
+    pthread_cond_broadcast(&bsem->cond);
 }
 
 static void
