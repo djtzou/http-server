@@ -1,10 +1,11 @@
-#ifndef UTILS_H
-#define UTILS_H
-
 /* utils.h
    
    Header file for utils.c 
 */
+
+#ifndef UTILS_H
+#define UTILS_H
+
 ssize_t readLine(int fd, void *buffer, size_t n);
 
 ssize_t readn(int fd, void *buffer, size_t n);
@@ -32,3 +33,5 @@ ssize_t readnFromBuf(rbuf_t *rb, void *buffer, size_t n);
 /* Default file permissions are DEF_MODE & ~DEF_UMASK */
 #define DEF_MODE   S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
 #define DEF_UMASK  S_IWGRP|S_IWOTH
+
+#endif

@@ -1,11 +1,7 @@
-#include <signal.h>
-#include <syslog.h>
 #include "tlpi_hr.h"
-#include "error_functions.h"
 #include "inet_sockets.h"
-#include "become_daemon.h"
 #include "utils.h"
-#include "get_num.h"
+
 
 
 #define FD_BUF_SIZE 20  /* Obtain from command line args later */
