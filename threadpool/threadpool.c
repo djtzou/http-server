@@ -4,9 +4,11 @@
  * Modified by Deh-Jun Tzou                      *
 \************************************************/
 
+#define _POSIX_C_SOURCE 200809L
+
 #include <pthread.h>
-#include "error_functions.h"
 #include "threadpool.h"
+#include "tlpi_hdr.h"
 
 
 /* ========================== GLOBALS ============================ */
@@ -58,6 +60,32 @@ typedef struct thpool {
     pthread_cond_t thpool_cnd;
     jobqueue jobqueue;
 } thpool;
+
+
+/* ========================== PROTOTYPES ============================ */
+
+
+thpool *thpool_init(unsigned int num_threads, unsigned jobqueue_size);
+int thpool_add_work(thpool *thpool, void (*function)(void*), void *arg);
+void thpool_destroy(thpool* thpool);
+void thpool_wait(thpool *thpool);
+int thpool_num_working_threads(thpool *thpool);
+
+static int jobqueue_init(jobqueue *jobqueue, unsigned int jobqueue_size);
+static void jobqueue_destroy(jobqueue *jobqueue);
+static int jobqueue_clear(jobqueue *jobqueue);
+static job *jobqueue_poll(jobqueue *jobqueue);
+static int jobqueue_add(jobqueue *jobqueue, job *job);
+
+static int thread_init(thpool *thpool, thread **thread, int id);
+static void *thread_start(void *arg);
+static void thread_destroy(thread *thread);
+
+static int bsem_init(bsem *bsem, int val);
+static int bsem_reset(bsem *bsem);
+static void bsem_post(bsem *bsem);
+static void bsem_post_all(bsem *bsem);
+static void bsem_wait(bsem *bsem);
 
 
 /* ========================== THREAD POOL ========================== */
