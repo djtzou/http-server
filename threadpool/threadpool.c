@@ -54,8 +54,8 @@ typedef struct thread {
 /* Thread Pool */
 typedef struct thpool {
     thread **threads;
-    unsigned int num_alive_threads;
-    unsigned int num_working_threads;
+    unsigned int num_threads_alive;
+    unsigned int num_threads_working;
     pthread_mutex_t thpool_mtx;
     pthread_cond_t thpool_cnd;
     jobqueue jobqueue;
@@ -85,10 +85,11 @@ static void bsem_wait(bsem *bsem_p);
 /* ========================== THREAD POOL ========================== */
 
 
-/* Create thread pool */
 thpool *
-thpool_init(unsigned int num_threads, unsigned jobqueue_size)
-{
+thpool_init(unsigned int num_threads, unsigned int jobqueue_size)
+{   
+    threads_keepalive = 1;
+
     if (num_threads <= 0) {
         errMsg("Must specify a positive number of threads");
         return NULL;
@@ -102,8 +103,8 @@ thpool_init(unsigned int num_threads, unsigned jobqueue_size)
         return NULL;
     }
 
-    thpool_p->num_alive_threads = 0;
-    thpool_p->num_working_threads = 0;
+    thpool_p->num_threads_alive = 0;
+    thpool_p->num_threads_working = 0;
 
     /* Initialize the job queue */
     if (jobqueue_init(&thpool_p->jobqueue, jobqueue_size) == -1) {
@@ -139,7 +140,7 @@ thpool_init(unsigned int num_threads, unsigned jobqueue_size)
     }
 
     /* Wait for all threads to be initialized */
-    while (thpool_p->num_alive_threads != num_threads);
+    while (thpool_p->num_threads_alive != num_threads);
 
     return thpool_p;
 }
@@ -173,7 +174,7 @@ thpool_destroy(thpool *thpool_p)
         return;
 
     /* Get total number of alive threads */
-    unsigned int total_alive_threads = thpool_p->num_alive_threads;
+    unsigned int total_threads_alive = thpool_p->num_threads_alive;
 
     /* End infinite loop for each thread */
     threads_keepalive = 0;
@@ -183,7 +184,7 @@ thpool_destroy(thpool *thpool_p)
     sleep(1);
 
     /* Terminate all remaining threads */
-    while (thpool_p->num_alive_threads) {
+    while (thpool_p->num_threads_alive) {
         bsem_post_all(thpool_p->jobqueue.has_jobs);
         sleep(1);
     }
@@ -193,7 +194,7 @@ thpool_destroy(thpool *thpool_p)
 
     /* Destroy thread structures */
     int i;
-    for (i = 0; i < total_alive_threads; i++) {
+    for (i = 0; i < total_threads_alive; i++) {
         thread_destroy(thpool_p->threads[i]);
     }
 
@@ -205,16 +206,16 @@ void
 thpool_wait(thpool *thpool_p)
 {
     pthread_mutex_lock(&thpool_p->thpool_mtx);
-    while (thpool_p->jobqueue.num_jobs || thpool_p->num_working_threads) {
+    while (thpool_p->jobqueue.num_jobs || thpool_p->num_threads_working) {
         pthread_cond_wait(&thpool_p->thpool_cnd, &thpool_p->thpool_mtx);
     }
     pthread_mutex_unlock(&thpool_p->thpool_mtx);
 }
 
 int
-thpool_num_working_threads(thpool *thpool_p)
+thpool_num_threads_working(thpool *thpool_p)
 {
-    return thpool_p->num_working_threads;
+    return thpool_p->num_threads_working;
 }
 
 
@@ -368,7 +369,7 @@ thread_start(void *arg)
 
     /* Mark thread as alive */
     pthread_mutex_lock(&thpool_p->thpool_mtx);
-    thpool_p->num_alive_threads++;
+    thpool_p->num_threads_alive++;
     pthread_mutex_unlock(&thpool_p->thpool_mtx);
 
     while (threads_keepalive) {
@@ -378,7 +379,7 @@ thread_start(void *arg)
         if (threads_keepalive) {    // Check invariant again as state may have changed
 
             pthread_mutex_lock(&thpool_p->thpool_mtx);
-            thpool_p->num_working_threads++;
+            thpool_p->num_threads_working++;
             pthread_mutex_unlock(&thpool_p->thpool_mtx);
 
             job *job_p = jobqueue_poll(&thpool_p->jobqueue);
@@ -392,8 +393,8 @@ thread_start(void *arg)
             }
 
             pthread_mutex_lock(&thpool_p->thpool_mtx);
-            thpool_p->num_working_threads--;
-            if (thpool_p->num_working_threads == 0) {
+            thpool_p->num_threads_working--;
+            if (thpool_p->num_threads_working == 0) {
                 pthread_cond_signal(&thpool_p->thpool_cnd);    // Signal thpool_wait()
             }
             pthread_mutex_unlock(&thpool_p->thpool_mtx);
@@ -401,7 +402,7 @@ thread_start(void *arg)
     }
 
     pthread_mutex_lock(&thpool_p->thpool_mtx);
-    thpool_p->num_alive_threads--;
+    thpool_p->num_threads_alive--;
     pthread_mutex_unlock(&thpool_p->thpool_mtx);
 
     return NULL;
