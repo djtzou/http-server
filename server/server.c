@@ -11,6 +11,7 @@
 #define NUM_THREADS 4
 #define MAX_NUM_JOBS 100
 
+
 int
 main(int argc, char *argv[])
 {
@@ -23,12 +24,14 @@ main(int argc, char *argv[])
     }
 
     /* Create a listening socket */
-    lfd = inetListen(SERVICE, BACKLOG);
+    socklen_t addrlen;
+    lfd = inetListen(SERVICE, BACKLOG, &addrlen);
     if (lfd == -1) {
         errExit("main(): inetListen(): Failed to create a listening socket");
     }
 
     for (;;) {
+
         /* Accept incoming connections */
         cfd = accept(lfd, NULL, NULL);
         if (cfd == -1) {
@@ -39,7 +42,7 @@ main(int argc, char *argv[])
         /* Assign connection to a thread */
         if (thpool_add_work(thpool, handle_request, cfd) == -1) {
             errMsg("main(): Failed to add work to thread pool");
-            // Should we wait for one job to complete? add this method to threadpool API?
+            // Should we wait for one job to complete? add this new method to threadpool API?
         }
     }
 }

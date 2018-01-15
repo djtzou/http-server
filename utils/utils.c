@@ -9,7 +9,7 @@
 \**********************************************************************/
 
 /* utils.c
- * 
+ *
  * A library of utility functions
 */
 #include "utils.h"
@@ -139,15 +139,15 @@ writen(int fd, const void *buffer, size_t n)
 }
 
 
-/* 
+/*
    Buffered read functions
 
    Implementations of readBufInit(), readBuf(), readLineFromBuf(), readnFromBuf().
 */
 
-/* Initialize the bookkeeping data structure pointed to by 'rb' */ 
+/* Initialize the bookkeeping data structure pointed to by 'rb' */
 
-void 
+void
 readBufInit(int fd, rbuf_t *rb)
 {
     rb->fd = fd;
@@ -156,7 +156,7 @@ readBufInit(int fd, rbuf_t *rb)
 }
 
 /* This is a wrapper function for the Unix read() function that
-   transfers min(n, rb->cnt) bytes from our intermediary userpsace 
+   transfers min(n, rb->cnt) bytes from our intermediary userspace
    buffer to the user buffer, where 'n' is the number of bytes requested by
    the user and rb->cnt is the number of unread bytes in the
    intermediary buffer. On entry, readBuf() refills the intermediary
@@ -168,7 +168,7 @@ readBuf(rbuf_t *rb, void *buffer, size_t n)
 {
     while (rb->cnt <= 0) {          /* Refill intermediary buffer if empty */
         rb->cnt = read(rb->fd, rb->buf, sizeof(rb->buf));
-       
+
         if (rb->cnt == -1) {
             if (errno != EINTR)     /* Continue/restart read() if interrupted by a signal */
                 return -1;          /* Return -1 for other errors */
@@ -178,11 +178,11 @@ readBuf(rbuf_t *rb, void *buffer, size_t n)
         else
             rb->bufptr = rb->buf;   /* Reset buffer pointer */
     }
-    
+
     /* Copy min(n, rb->cnt) bytes from intermediary buf to user buf */
-    int cnt = n;   
+    int cnt = n;
     if (rb->cnt < n)
-        cnt = rb->cnt; 
+        cnt = rb->cnt;
     memcpy(buffer, rb->buf, cnt);
     rb->cnt -= cnt;
     rb->bufptr += cnt;
