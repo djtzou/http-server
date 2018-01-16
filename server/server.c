@@ -40,7 +40,7 @@ main(int argc, char *argv[])
         }
 
         /* Assign connection to a thread */
-        if (thpool_add_work(thpool, handle_request, cfd) == -1) {
+        if (thpool_add_work(thpool, request_handle, cfd) == -1) {
             errMsg("main(): Failed to add work to thread pool");
             // Should we wait for one job to complete? add this new method to threadpool API?
         }
