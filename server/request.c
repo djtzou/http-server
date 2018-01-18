@@ -3,9 +3,10 @@
 
 #define MAX_LEN 1024
 
+
 typedef struct hdr_t {
-    char *field_name;
-    char *field_value;
+    char *name;
+    char *value;
     struct hdr_t *next;
 } hdr_t;
 
@@ -51,9 +52,10 @@ request_get(rbuf_t rbuf_p, char *uri)
 {
     char filename[4096];
 
-    request_parse_uri(uri, filename)
+    request_parse_uri(uri, filename);
 
-    request_parse_hdr(&rbuf);
+    hdr_t** hdr_pp = request_parse_hdr(&rbuf);
+
 
 }
 
@@ -70,8 +72,16 @@ request_parse_hdr(rbuf_t *rbuf_p)
     hdr_t *hdr_p = *hdr_pp;
     while (1) {
         readLineFromBuf(rbuf_p, buf, BUF_SIZE);
-        if (!strcmp(buf, "\r")) {
+        if (!strcmp(buf, "\r\n")) {
             break;
+        }
+
+        char *name = trimwhitespace(strtok(buf, ":"));
+        char *value = trimwhitespace(strtok(NULL, ":"));
+
+        if (name == NULL || value == NULL) {
+            errMsg("request_parse_hdr(): Bad header field format");
+            continue;
         }
 
         hdr_t *tmp_p = (hdr_t *) malloc(sizeof(**hdr_pp));
@@ -88,12 +98,24 @@ request_parse_hdr(rbuf_t *rbuf_p)
             hdr_p = hdr_p->next;
         }
 
+        hdr_p->name = (char *) malloc(sizeof(strlen(name))+1);
+        strcpy(hdr_p->name, name);
+        hdr_p->value = (char *) malloc(sizeof(strlen(value))+1);
+        strcpy(hdr_p->value, value);
     }
+
+    return hdr_pp;
 }
 
 void
 request_parse_uri(char *uri, char *filename)
 {
-    struct stat stbuf;
+    if (sprintf(filename, ".%s", uri) < 0) {
+        errMsg("request_parse_uri(): sprintf() failed");
+        return;
+    }
 
+    if (uri[strlen(uri)-1] == '/') {
+        strcat(filename, "index.html");
+    }
 }

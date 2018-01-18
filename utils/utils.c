@@ -270,3 +270,71 @@ readnFromBuf(rbuf_t *rb, void *buffer, size_t n)
     }
     return totRead;                     /* Must be 'n' bytes if we get here */
 }
+
+
+// Note: This function returns a pointer to a substring of the original string.
+// If the given string was allocated dynamically, the caller must not overwrite
+// that pointer with the returned value, since the original pointer must be
+// deallocated using the same allocator with which it was allocated.  The return
+// value must NOT be deallocated using free() etc.
+/* @author: Adam Rosenfield */
+char *
+trimwhitespace(char *str)
+{
+    if (str == NULL)
+        return str;
+
+    char *end;
+
+    // Trim leading space
+    while(isspace((unsigned char)*str)) str++;
+
+    if(*str == 0)  // All spaces?
+        return str;
+
+    // Trim trailing space
+    end = str + strlen(str) - 1;
+    while(end > str && isspace((unsigned char)*end)) end--;
+
+    // Write new null terminator
+    *(end+1) = 0;
+
+    return str;
+}
+
+// Stores the trimmed input string into the given output buffer, which must be
+// large enough to store the result.  If it is too small, the output is
+// truncated.
+/* @author: Adam Rosenfield */
+size_t
+trimwhitespace(char *out, size_t len, const char *str)
+{
+    if (len == 0 || str == NULL)
+        return 0;
+
+    const char *end;
+    size_t out_size;
+
+    // Trim leading space
+    while (isspace((unsigned char)*str)) str++;
+
+    if (*str == 0)  // All spaces?
+    {
+        *out = 0;
+        return 1;
+    }
+
+    // Trim trailing space
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) end--;
+    end++;
+
+    // Set output size to minimum of trimmed string length and buffer size minus 1
+    out_size = (end - str) < len-1 ? (end - str) : len-1;
+
+    // Copy trimmed string and add null terminator
+    memcpy(out, str, out_size);
+    out[out_size] = 0;
+
+    return out_size;
+}
