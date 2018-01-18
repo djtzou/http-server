@@ -281,7 +281,7 @@ readnFromBuf(rbuf_t *rb, void *buffer, size_t n)
 char *
 trimwhitespace(char *str)
 {
-    if (str == NULL)
+    if (str == NULL || str[0] == '\0')
         return str;
 
     char *end;
@@ -309,7 +309,7 @@ trimwhitespace(char *str)
 size_t
 trimwhitespace(char *out, size_t len, const char *str)
 {
-    if (len == 0 || str == NULL)
+    if (len == 0 || str == NULL || str[0] == '\0')
         return 0;
 
     const char *end;
