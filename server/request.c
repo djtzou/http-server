@@ -57,6 +57,8 @@ request_get(int cfd, rbuf_t rbuf_p, char *uri)
     hdr_t **hdr_pp = request_parse_hdr(&rbuf);
 
     response_get(cfd, filename);
+
+    request_destroy_hdr(hdr_pp);
 }
 
 hdr_t **
@@ -99,8 +101,16 @@ request_parse_hdr(rbuf_t *rbuf_p)
         }
 
         hdr_p->name = (char *) malloc(sizeof(strlen(name))+1);
+        if (hdr_p->name == NULL) {
+            errMsg("request_parse_hdr(): Failed to allocate memory for hdr name");
+            return NULL;
+        }
         strcpy(hdr_p->name, name);
         hdr_p->value = (char *) malloc(sizeof(strlen(value))+1);
+        if (hdr_p->value == NULL) {
+            errMsg("request_parse_hdr(): Failed to allocate memory for hdr value");
+            return NULL;
+        }
         strcpy(hdr_p->value, value);
 
         buf[0] = '\0';
@@ -150,11 +160,30 @@ response_get(int cfd, char *filename)
     if (!(S_ISREG(sbuf.st_mode) && (sbuf.st_mode & S_IRUSR)))
         //TODO: request_error(cfd, );
 
+    response_serve_static(cfd, filename, sbuf.st_size);
+}
 
-    response_serve_static();
+void
+response_serve_static(int cfd, char *filename, int filesize)
+{
+    char resp[BUF_SIZE], hdr[BUF_SIZE];
+
+    sprintf(resp, "HTTP/1.0 200 OK\r\n");
+    response_make_hdr(hdr);
+    sprintf(resp, "%s%s\r\n", resp, hdr);
+}
+
+void
+response_get_file_format(char *filename, char *fileformat)
+{
+
+}
+
+void
+response_make_hdr(char *hdr)
+{
+
 }
 
 
 request_error()
-request_get_file_type()
-response_serve_static()
