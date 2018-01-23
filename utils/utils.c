@@ -338,3 +338,12 @@ trimwhitespace(char *out, size_t len, const char *str)
 
     return out_size;
 }
+
+
+// Returns the filename extension.
+// The filename extension is the string after the last ".".
+const char *get_filename_ext(const char *filename) {
+    const char *dot = strrchr(filename, '.');
+    if(!dot || dot == filename) return "";
+    return dot + 1;
+}

@@ -39,5 +39,6 @@ char *trimwhitespace(char *str);
 
 size_t trimwhitespace(char *out, size_t len, const char *str);
 
+const char *get_filename_ext(const char *filename);
 
 #endif
