@@ -51,6 +51,8 @@ request_handle(void *arg)
         errMsg("request_handle(): Unable to fulfill HTTP request method");
         return;
     }
+
+    close(cfd);
 }
 
 void

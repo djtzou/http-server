@@ -168,7 +168,7 @@ usageErr(const char *format, ...)
 {
     va_list argList;
 
-    fflush(stdout);           /* Flush any pending stdout 
+    fflush(stdout);           /* Flush any pending stdout
                                  stdout may contain useful information
                                  for debugging */
 
@@ -189,7 +189,7 @@ cmdLineErr(const char *format, ...)
 {
     va_list argList;
 
-    fflush(stdout);           /* Flush any pending stdout 
+    fflush(stdout);           /* Flush any pending stdout
                                  stdout may contain useful information
                                  for debugging */
 
