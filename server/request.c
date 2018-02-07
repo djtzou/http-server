@@ -1,8 +1,14 @@
 
+#include "../utils/tlpi_hdr.h"
 #include "../utils/utils.h"
 #include <sys/stat.h>
+#include <sys/sendfile.h>
+#include <fcntl.h>
 
 #define MAX_LEN 1024
+
+
+/* ========================== STRUCTURES ============================ */
 
 
 typedef struct hdr_t {
@@ -10,6 +16,18 @@ typedef struct hdr_t {
     char *value;
     struct hdr_t *next;
 } hdr_t;
+
+
+/* ========================== PROTOTYPES ============================ */
+
+static void request_get(int cfd, rbuf_t rbuf_p, char *uri);
+static hdr_t **request_parse_hdr(rbuf_t *rbuf_p);
+static void request_destroy_hdr(hdr_t **hdr_pp);
+static void request_parse_uri(char *uri, char *filename);
+static void response_get(int cfd, char *filename);
+static void response_serve_static(int cfd, char *filename, int filesize);
+static void response_get_content_type(char *filename, char *content_type);
+static void request_error(int cfd, const char *status_code, const char *reason, const char *msg);
 
 
 void
@@ -44,8 +62,9 @@ request_handle(void *arg)
         return;
     }
 
-    if (strcmp(method, "GET") {
-        request_get(cfd, &rbuf, uri);
+    if (strcmp(method, "GET")) {
+        request_get(cfd, rbuf, uri);
+    }
     else {
         request_error(cfd, "501", "Not Implemented", "Server cannot fulfill the request method for now");
         errMsg("request_handle(): Unable to fulfill HTTP request method");
@@ -55,8 +74,8 @@ request_handle(void *arg)
     close(cfd);
 }
 
-void
-request_get(int cfd, rbuf_t rbuf_p, char *uri)
+static void
+request_get(int cfd, rbuf_t rbuf, char *uri)
 {
     char filename[MAX_LEN*4];
 
@@ -69,7 +88,7 @@ request_get(int cfd, rbuf_t rbuf_p, char *uri)
     request_destroy_hdr(hdr_pp);
 }
 
-hdr_t **
+static hdr_t **
 request_parse_hdr(rbuf_t *rbuf_p)
 {   // Return 500 Internal Server Error for failed mallocs?
     hdr_t **hdr_pp = (hdr_t **) malloc(sizeof(*hdr_pp));
@@ -127,7 +146,7 @@ request_parse_hdr(rbuf_t *rbuf_p)
     return hdr_pp;
 }
 
-void
+static void
 request_destroy_hdr(hdr_t **hdr_pp)
 {
     hdr_t *hdr_p, *next;
@@ -143,7 +162,7 @@ request_destroy_hdr(hdr_t **hdr_pp)
     free(hdr_pp);
 }
 
-void
+static void
 request_parse_uri(char *uri, char *filename)
 {
     if (sprintf(filename, ".%s", uri) < 0) {
@@ -156,7 +175,7 @@ request_parse_uri(char *uri, char *filename)
     }
 }
 
-void
+static void
 response_get(int cfd, char *filename)
 {
     struct stat sbuf;
@@ -173,7 +192,7 @@ response_get(int cfd, char *filename)
     response_serve_static(cfd, filename, sbuf.st_size);
 }
 
-void
+static void
 response_serve_static(int cfd, char *filename, int filesize)
 {
     char resp[BUF_SIZE];//, hdr[BUF_SIZE]; // write a function that creates the header?
@@ -188,21 +207,22 @@ response_serve_static(int cfd, char *filename, int filesize)
     writen(cfd, resp, strlen(resp));    // can use send() sys call
 
     // Body
+    int in_fd;
     if ((in_fd = open(filename, O_RDONLY)) < 0) {
         errMsg("Failed to open file %s", filename);
-        request_error(cfd, "500", "Internal Server Error");
+        request_error(cfd, "500", "Internal Server Error", "");
         return;
     }
     off_t offset = 0;
     ssize_t nbytes = sendfile(cfd, in_fd, &offset, filesize);   // Can use mmap(). TCP_CORK option?
     if (nbytes < 0) {
         errMsg("response_serve_static(): sendfile(): Failed to send file to socket");
-        request_error(cfd "500" "Internal Server Error");
+        request_error(cfd, "500", "Internal Server Error", "");
         return;
     }
 }
 
-void
+static void
 response_get_content_type(char *filename, char *content_type)
 {
     const char *ext;
@@ -219,7 +239,7 @@ response_get_content_type(char *filename, char *content_type)
     }
 }
 
-void
+static void
 request_error(int cfd, const char *status_code, const char *reason, const char *msg)
 {   // Serve static webpage for each error code?
     char body[MAX_LEN];
@@ -231,7 +251,7 @@ request_error(int cfd, const char *status_code, const char *reason, const char *
     sprintf(resp, "HTTP/1.0 %s %s\r\n", status_code, reason);
     sprintf(resp, "%sServer: Tzou's HTTP server\r\n", resp);
     sprintf(resp, "%sContent-Type: %s\r\n", resp, "text/html");
-    sprintf(resp, "%sContent-Length: %d\r\n", resp, strlen(body));
+    sprintf(resp, "%sContent-Length: %lx\r\n", resp, strlen(body));
     strcat(resp, "\r\n");
     strcat(resp, body);
 

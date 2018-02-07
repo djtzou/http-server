@@ -37,7 +37,7 @@ ssize_t readnFromBuf(rbuf_t *rb, void *buffer, size_t n);
 
 char *trimwhitespace(char *str);
 
-size_t trimwhitespace(char *out, size_t len, const char *str);
+size_t trimwhitespace_copy(char *out, size_t len, const char *str);
 
 const char *get_filename_ext(const char *filename);
 

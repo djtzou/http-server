@@ -12,8 +12,9 @@
  *
  * A library of utility functions
 */
-#include "utils.h"
 #include "tlpi_hdr.h"
+#include "utils.h"
+#include <ctype.h>
 
 
 /* read_line.c
@@ -175,6 +176,7 @@ readBuf(rbuf_t *rb, void *buffer, size_t n)
         }
         else if (rb->cnt == 0) {    /* Encountered EOF */
             return 0;
+        }
         else
             rb->bufptr = rb->buf;   /* Reset buffer pointer */
     }
@@ -307,7 +309,7 @@ trimwhitespace(char *str)
 // truncated.
 /* @author: Adam Rosenfield */
 size_t
-trimwhitespace(char *out, size_t len, const char *str)
+trimwhitespace_copy(char *out, size_t len, const char *str)
 {
     if (len == 0 || str == NULL || str[0] == '\0')
         return 0;

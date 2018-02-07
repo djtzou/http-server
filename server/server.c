@@ -1,11 +1,13 @@
 
-#include "tlpi_hr.h"
-#include "inet_sockets.h"
+#include "../utils/tlpi_hdr.h"
+#include "../utils/inet_sockets.h"
 #include "../threadpool/threadpool.h"
 #include "request.h"
 #include <signal.h>
+#include <pthread.h>
 
-#define FD_BUF_SIZE 20  /* Obtain from command line args later */
+
+//#define FD_BUF_SIZE 20  /* Obtain from command line args later */
 #define SERVICE "http"
 #define BACKLOG 20      /* Obtain from command line args or file later */
 #define NUM_THREADS 4
@@ -13,6 +15,7 @@
 
 
 static volatile sig_atomic_t run_forever = 1;
+static void *handle_signals();
 
 
 int
@@ -44,7 +47,7 @@ main(int argc, char *argv[])
     }
 
     /* Detach the signal handling thread */
-    if (pthread_deatch(signal_thr) > 0) {
+    if (pthread_detach(signal_thr) > 0) {
         errExit("main(): pthread_detach(): Failed to detach signal handling thread");
     }
 
@@ -53,12 +56,6 @@ main(int argc, char *argv[])
     lfd = inetListen(SERVICE, BACKLOG, &addrlen);
     if (lfd == -1) {
         errExit("main(): inetListen(): Failed to create a listening socket");
-    }
-
-    /* Set the SO_REUSEADDR socket option */
-    int optval = 1;
-    if (setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1) {
-        errExit("main(): setsockopt(): Failed to set SO_REUSEADDR socket option");
     }
 
     for (;run_forever;) {
