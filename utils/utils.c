@@ -185,7 +185,7 @@ readBuf(rbuf_t *rb, void *buffer, size_t n)
     int cnt = n;
     if (rb->cnt < n)
         cnt = rb->cnt;
-    memcpy(buffer, rb->buf, cnt);
+    memcpy(buffer, rb->bufptr, cnt);
     rb->cnt -= cnt;
     rb->bufptr += cnt;
     return cnt;

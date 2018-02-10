@@ -40,7 +40,8 @@ request_handle(void *arg)
     char buf[BUF_SIZE], method[MAX_LEN], uri[MAX_LEN*4], proto_ver[MAX_LEN];
 
     readBufInit(cfd, &rbuf);
-    readLineFromBuf(&rbuf, buf, BUF_SIZE);  // can use recv() sys call
+    if (readLineFromBuf(&rbuf, buf, BUF_SIZE) < 0)  // can use recv() sys call
+        request_error(cfd, "500", "Internal Server Error", "");
 
     /* Parse request line */
     sscanf(buf, "%s %s %s", method, uri, proto_ver);
