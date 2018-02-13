@@ -56,14 +56,15 @@ request_handle(void *arg)
         errMsg("request_handle(): Client sent a Non-HTTP request");
         return;
     }
-    else if (strcmp(ver, "1.0") || strcmp(ver, "1.1"))
+    
+    if (strcmp(ver, "1.0") && strcmp(ver, "1.1"))
     {
         request_error(cfd, "505", "HTTP Version Not Supported", "");
         errMsg("request_handle(): 505 HTTP Version Not Supported");
         return;
     }
 
-    if (strcmp(method, "GET")) {
+    if (!strcmp(method, "GET")) {
         request_get(cfd, rbuf, uri);
     }
     else {
@@ -114,13 +115,14 @@ request_parse_hdr(rbuf_t *rbuf_p)
             continue;
         }
 
-        hdr_t *tmp_p = (hdr_t *) malloc(sizeof(**hdr_pp));
+        hdr_t *tmp_p = (hdr_t *) malloc(sizeof(tmp_p));
         if (tmp_p == NULL) {
             errMsg("request_parse_hdr(): Failed to allocate memory for hdr_t structure");
             return NULL;
         }
 
         if (hdr_p == NULL) {
+            *hdr_pp = tmp_p;
             hdr_p = tmp_p;
         }
         else {
