@@ -40,22 +40,22 @@ main(int argc, char *argv[])
         errExit("main(): thpool_init(): Failed to create thread pool");
     }
 
-    /* Create a thread to accept incoming signals synchronously */
+    /* Create a listening socket */
+    socklen_t addrlen;
+    lfd = inetListen(SERVICE, BACKLOG, &addrlen);
+    if (lfd == -1) {
+        errExit("main(): inetListen(): Failed to create a listening socket");
+    }
+
+     /* Create a thread to accept incoming signals synchronously */
     pthread_t signal_thr;
-    if (pthread_create(&signal_thr, NULL, handle_signals, NULL /*(void *) &set*/) > 0) {
+    if (pthread_create(&signal_thr, NULL, handle_signals, lfd) > 0) {
         errExit("main(): pthread_create(): Failed to create signal handling thread");
     }
 
     /* Detach the signal handling thread */
     if (pthread_detach(signal_thr) > 0) {
         errExit("main(): pthread_detach(): Failed to detach signal handling thread");
-    }
-
-    /* Create a listening socket */
-    socklen_t addrlen;
-    lfd = inetListen(SERVICE, BACKLOG, &addrlen);
-    if (lfd == -1) {
-        errExit("main(): inetListen(): Failed to create a listening socket");
     }
 
     for (;run_forever;) {
@@ -80,21 +80,32 @@ main(int argc, char *argv[])
     exit(EXIT_SUCCESS);
 }
 
+
+/*
+This signal handler function is executed in a separate thread. It waits
+for and accepts signals synchronously to initiate a graceful termination 
+of this program. shutdown() is used to interrupt the blocking accept() as
+it will return an error. Modifying run_forever boolean trap will then break
+the loop in the main thread.
+
+We can also implement this graceful termination by setting up a signal
+handler in the main thread for the signals we want to handle. In this case,
+it is important to unset the SA_RESTART flag in the sa_flags of the sigaction
+structure for the handler so that accept() returns -1 upon signal reception. 
+The signal handler will then modify the run_forever boolean trap.
+*/
 static void *
-handle_signals(/*void *arg*/)
+handle_signals(void *arg)
 {
     //sigset_t *set = (sigset_t *) arg;
-    sigset_t set, prev_set;
+    int lfd = (int) arg;
+    sigset_t set;
 
     if (sigaddset(&set, SIGABRT) < 0 || sigaddset(&set, SIGHUP) < 0
         || sigaddset(&set, SIGINT) < 0 || sigaddset(&set, SIGQUIT) < 0
         || sigaddset(&set, SIGTERM) < 0) {
         errExit("handle_signals(): sigaddset()");
-    }
-
-    if (pthread_sigmask(SIG_UNBLOCK, &set, &prev_set) > 0) {
-        errExit("handle_signals(): pthread_sigmask(): Failed to unblock signals");
-    }
+    } 
 
     int sig;
     if (sigwait(&set, &sig) > 0) {
@@ -107,6 +118,9 @@ handle_signals(/*void *arg*/)
         case SIGQUIT:
         case SIGHUP:
             run_forever = 0;
+            if (shutdown(lfd, SHUT_RD) < 0) {
+                errExit("shutdown(): Failed to close read channel of listening socket");
+            }
             break;
         case SIGABRT:
             //
