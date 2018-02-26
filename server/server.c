@@ -101,6 +101,10 @@ handle_signals(void *arg)
     int lfd = (int) arg;
     sigset_t set;
 
+    if (sigemptyset(&set) < 0) {
+        errMsg("handle_signals(): sigemptyset()");
+    }
+
     if (sigaddset(&set, SIGABRT) < 0 || sigaddset(&set, SIGHUP) < 0
         || sigaddset(&set, SIGINT) < 0 || sigaddset(&set, SIGQUIT) < 0
         || sigaddset(&set, SIGTERM) < 0) {

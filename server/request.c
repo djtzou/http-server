@@ -115,11 +115,12 @@ request_parse_hdr(rbuf_t *rbuf_p)
             continue;
         }
 
-        hdr_t *tmp_p = (hdr_t *) malloc(sizeof(tmp_p));
+        hdr_t *tmp_p = (hdr_t *) malloc(sizeof(*tmp_p));
         if (tmp_p == NULL) {
             errMsg("request_parse_hdr(): Failed to allocate memory for hdr_t structure");
-            return NULL;
+            continue;
         }
+        tmp_p->next = NULL; // Initialize next member
 
         if (hdr_p == NULL) {
             *hdr_pp = tmp_p;
@@ -130,18 +131,21 @@ request_parse_hdr(rbuf_t *rbuf_p)
             hdr_p = hdr_p->next;
         }
 
-        hdr_p->name = (char *) malloc(sizeof(strlen(name))+1);
+        hdr_p->name = (char *) malloc((strlen(name)+1)*sizeof(char));
         if (hdr_p->name == NULL) {
             errMsg("request_parse_hdr(): Failed to allocate memory for hdr name");
-            return NULL;
         }
-        strcpy(hdr_p->name, name);
-        hdr_p->value = (char *) malloc(sizeof(strlen(value))+1);
+        else {
+            strcpy(hdr_p->name, name);
+        }
+
+        hdr_p->value = (char *) malloc((strlen(value)+1)*sizeof(char));
         if (hdr_p->value == NULL) {
             errMsg("request_parse_hdr(): Failed to allocate memory for hdr value");
-            return NULL;
         }
-        strcpy(hdr_p->value, value);
+        else {
+            strcpy(hdr_p->value, value);
+        }
 
         buf[0] = '\0';
     }
@@ -152,8 +156,10 @@ request_parse_hdr(rbuf_t *rbuf_p)
 static void
 request_destroy_hdr(hdr_t **hdr_pp)
 {
-    hdr_t *hdr_p, *next;
-    hdr_p = *hdr_pp;
+    if (hdr_pp == NULL)
+        return;
+
+    hdr_t *hdr_p = *hdr_pp, *next;
     while (hdr_p != NULL) {
         next = hdr_p->next;
         free(hdr_p->name);
