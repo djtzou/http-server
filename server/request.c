@@ -1,6 +1,7 @@
 
 #include "../utils/tlpi_hdr.h"
 #include "../utils/utils.h"
+#include "../utils/inet_sockets.h"
 #include <sys/stat.h>
 #include <sys/sendfile.h>
 #include <fcntl.h>
@@ -34,10 +35,17 @@ void
 request_handle(void *arg)
 {
     int cfd = (int) arg;
-     // use getpeername() to get address of peer socket
 
     rbuf_t rbuf;
     char buf[BUF_SIZE], method[MAX_LEN], uri[MAX_LEN*4], proto_ver[MAX_LEN];
+    struct sockaddr my_addr;  /* Socket address buffer */
+    socklen_t len = sizeof(my_addr); /* Size of socket address buffer */
+    char addr_str[IS_ADDR_STR_LEN];
+
+    /* Get peer socket address */
+    if (getpeername(cfd, &my_addr, &len) == -1) {
+        errMsg("request_handle(): getpeername(): Failed to get peer socket address");
+    }
 
     readBufInit(cfd, &rbuf);
     if (readLineFromBuf(&rbuf, buf, BUF_SIZE) <= 0)  // can use recv() sys call
@@ -45,6 +53,10 @@ request_handle(void *arg)
 
     /* Parse request line */
     sscanf(buf, "%s %s %s", method, uri, proto_ver);
+
+    /* Print peer request line */
+    printf("%s %s", inetAddressStr(&my_addr, len, addr_str, IS_ADDR_STR_LEN), buf);
+    fflush(stdout);
 
     char tmp[MAX_LEN];
     strcpy(tmp, proto_ver);
@@ -101,6 +113,7 @@ request_parse_hdr(rbuf_t *rbuf_p, int cfd)
 
     char buf[BUF_SIZE];
     hdr_t *hdr_p = *hdr_pp;
+    int empty_list = 1;
     while (1) {
         if (readLineFromBuf(rbuf_p, buf, BUF_SIZE) <= 0)  // can use recv() sys call
             request_error(cfd, "500", "Internal Server Error", "");
@@ -124,9 +137,10 @@ request_parse_hdr(rbuf_t *rbuf_p, int cfd)
         }
         tmp_p->next = NULL; // Initialize next member
 
-        if (hdr_p == NULL) {
+        if (empty_list) {
             *hdr_pp = tmp_p;
             hdr_p = tmp_p;
+            empty_list = 0;
         }
         else {
             hdr_p->next = tmp_p;
@@ -262,7 +276,7 @@ request_error(int cfd, const char *status_code, const char *reason, const char *
     sprintf(resp, "HTTP/1.0 %s %s\r\n", status_code, reason);
     sprintf(resp, "%sServer: Tzou's HTTP server\r\n", resp);
     sprintf(resp, "%sContent-Type: %s\r\n", resp, "text/html");
-    sprintf(resp, "%sContent-Length: %lx\r\n", resp, strlen(body));
+    sprintf(resp, "%sContent-Length: %lu\r\n", resp, strlen(body));
     strcat(resp, "\r\n");
     strcat(resp, body);
 
