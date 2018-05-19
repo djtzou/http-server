@@ -58,6 +58,16 @@ main(int argc, char *argv[])
         errExit("main(): pthread_detach(): Failed to detach signal handling thread");
     }
 
+    /* Print listening socket address */
+    struct sockaddr my_addr;  /* Socket address buffer */
+    socklen_t len = sizeof(my_addr); /* Size of socket address buffer */
+    char addr_str[IS_ADDR_STR_LEN];
+    if (getsockname(lfd, &my_addr, &len) == -1) {
+        errExit("main(): getsockname(): Failed to get listening socket address");
+    }
+    printf("Starting server at %s\n", inetAddressStr(&my_addr, len, addr_str, IS_ADDR_STR_LEN));
+    fflush(stdout);
+
     for (;run_forever;) {
 
         /* Accept incoming connections */
@@ -83,7 +93,7 @@ main(int argc, char *argv[])
 
 /*
 This signal handler function is executed in a separate thread. It waits
-for and accepts signals synchronously to initiate a graceful termination 
+for and accepts signals synchronously to initiate a graceful termination
 of this program. shutdown() is used to interrupt the blocking accept() as
 it will return an error. Modifying run_forever boolean trap will then break
 the loop in the main thread.
@@ -91,7 +101,7 @@ the loop in the main thread.
 We can also implement this graceful termination by setting up a signal
 handler in the main thread for the signals we want to handle. In this case,
 it is important to unset the SA_RESTART flag in the sa_flags of the sigaction
-structure for the handler so that accept() returns -1 upon signal reception. 
+structure for the handler so that accept() returns -1 upon signal reception.
 The signal handler will then modify the run_forever boolean trap.
 */
 static void *
@@ -109,7 +119,7 @@ handle_signals(void *arg)
         || sigaddset(&set, SIGINT) < 0 || sigaddset(&set, SIGQUIT) < 0
         || sigaddset(&set, SIGTERM) < 0) {
         errExit("handle_signals(): sigaddset()");
-    } 
+    }
 
     int sig;
     if (sigwait(&set, &sig) > 0) {
