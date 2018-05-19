@@ -21,7 +21,7 @@ typedef struct hdr_t {
 /* ========================== PROTOTYPES ============================ */
 
 static void request_get(int cfd, rbuf_t rbuf_p, char *uri);
-static hdr_t **request_parse_hdr(rbuf_t *rbuf_p);
+static hdr_t **request_parse_hdr(rbuf_t *rbuf_p, int cfd);
 static void request_destroy_hdr(hdr_t **hdr_pp);
 static void request_parse_uri(char *uri, char *filename);
 static void response_get(int cfd, char *filename);
@@ -40,7 +40,7 @@ request_handle(void *arg)
     char buf[BUF_SIZE], method[MAX_LEN], uri[MAX_LEN*4], proto_ver[MAX_LEN];
 
     readBufInit(cfd, &rbuf);
-    if (readLineFromBuf(&rbuf, buf, BUF_SIZE) < 0)  // can use recv() sys call
+    if (readLineFromBuf(&rbuf, buf, BUF_SIZE) <= 0)  // can use recv() sys call
         request_error(cfd, "500", "Internal Server Error", "");
 
     /* Parse request line */
@@ -56,7 +56,7 @@ request_handle(void *arg)
         errMsg("request_handle(): Client sent a Non-HTTP request");
         return;
     }
-    
+
     if (strcmp(ver, "1.0") && strcmp(ver, "1.1"))
     {
         request_error(cfd, "505", "HTTP Version Not Supported", "");
@@ -83,7 +83,7 @@ request_get(int cfd, rbuf_t rbuf, char *uri)
 
     request_parse_uri(uri, filename);
 
-    hdr_t **hdr_pp = request_parse_hdr(&rbuf);
+    hdr_t **hdr_pp = request_parse_hdr(&rbuf, cfd);
 
     response_get(cfd, filename);
 
@@ -91,7 +91,7 @@ request_get(int cfd, rbuf_t rbuf, char *uri)
 }
 
 static hdr_t **
-request_parse_hdr(rbuf_t *rbuf_p)
+request_parse_hdr(rbuf_t *rbuf_p, int cfd)
 {   // Return 500 Internal Server Error for failed mallocs?
     hdr_t **hdr_pp = (hdr_t **) malloc(sizeof(*hdr_pp));
     if (hdr_pp == NULL) {
@@ -102,7 +102,9 @@ request_parse_hdr(rbuf_t *rbuf_p)
     char buf[BUF_SIZE];
     hdr_t *hdr_p = *hdr_pp;
     while (1) {
-        readLineFromBuf(rbuf_p, buf, BUF_SIZE); // can use recv(). handle error retval of -1.
+        if (readLineFromBuf(rbuf_p, buf, BUF_SIZE) <= 0)  // can use recv() sys call
+            request_error(cfd, "500", "Internal Server Error", "");
+
         if (!strcmp(buf, "\r\n")) {
             break;
         }
