@@ -48,8 +48,11 @@ request_handle(void *arg)
     }
 
     readBufInit(cfd, &rbuf);
-    if (readLineFromBuf(&rbuf, buf, BUF_SIZE) <= 0)  // can use recv() sys call
-        request_error(cfd, "500", "Internal Server Error", "");
+    if (readLineFromBuf(&rbuf, buf, BUF_SIZE) <= 0) {   // can use recv() sys call
+        /* Connection error. Peer may have closed socket. */
+        errMsg("request_handle(): readLineFromBuf(): Error reading from socket. Peer may have closed connection");
+        return;
+    }
 
     /* Parse request line */
     sscanf(buf, "%s %s %s", method, uri, proto_ver);
@@ -115,8 +118,10 @@ request_parse_hdr(rbuf_t *rbuf_p, int cfd)
     hdr_t *hdr_p = *hdr_pp;
     int empty_list = 1;
     while (1) {
-        if (readLineFromBuf(rbuf_p, buf, BUF_SIZE) <= 0)  // can use recv() sys call
-            request_error(cfd, "500", "Internal Server Error", "");
+        if (readLineFromBuf(rbuf_p, buf, BUF_SIZE) <= 0) {  // can use recv() sys call
+            errMsg("request_handle(): readLineFromBuf(): Error reading from socket. Peer may have closed connection");
+            return hdr_pp;
+        }
 
         if (!strcmp(buf, "\r\n")) {
             break;
@@ -224,12 +229,16 @@ response_serve_static(int cfd, char *filename, int filesize)
     char content_type[MAX_LEN];
     response_get_content_type(filename, content_type);
 
+    // Header
     sprintf(resp, "HTTP/1.0 200 OK\r\n");
     sprintf(resp, "%sServer: Tzou's HTTP server\r\n", resp);
     sprintf(resp, "%sContent-Type: %s\r\n", resp, content_type);
     sprintf(resp, "%sContent-Length: %d\r\n", resp, filesize);
     strcat(resp, "\r\n");
-    writen(cfd, resp, strlen(resp));    // can use send() sys call
+    if (writen(cfd, resp, strlen(resp)) == -1) {    // can use send() sys call
+        errMsg("response_serve_static(): writen(): Failed to write headers to socket. Peer may have closed connection.");
+        return;
+    }
 
     // Body
     int in_fd;
@@ -242,7 +251,6 @@ response_serve_static(int cfd, char *filename, int filesize)
     ssize_t nbytes = sendfile(cfd, in_fd, &offset, filesize);   // Can use mmap(). TCP_CORK option?
     if (nbytes < 0) {
         errMsg("response_serve_static(): sendfile(): Failed to send file to socket");
-        request_error(cfd, "500", "Internal Server Error", "");
         return;
     }
 }
@@ -280,5 +288,8 @@ request_error(int cfd, const char *status_code, const char *reason, const char *
     strcat(resp, "\r\n");
     strcat(resp, body);
 
-    writen(cfd, resp, strlen(resp)); // can use send(). handle error retval of -1.
+    if (writen(cfd, resp, strlen(resp)) == -1) {    // can use send(). handle error retval of -1.
+        errMsg("request_error(): writen(): Failed to write to socket. Peer may have closed connection.");
+        return;
+    }
 }

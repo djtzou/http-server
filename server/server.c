@@ -117,7 +117,7 @@ handle_signals(void *arg)
 
     if (sigaddset(&set, SIGABRT) < 0 || sigaddset(&set, SIGHUP) < 0
         || sigaddset(&set, SIGINT) < 0 || sigaddset(&set, SIGQUIT) < 0
-        || sigaddset(&set, SIGTERM) < 0) {
+        || sigaddset(&set, SIGTERM) < 0 || sigaddset(&set, SIGPIPE) < 0) {
         errExit("handle_signals(): sigaddset()");
     }
 
@@ -138,6 +138,9 @@ handle_signals(void *arg)
             break;
         case SIGABRT:
             //
+            break;
+        case SIGPIPE:
+            // If server writes to a connection closed by peer
             break;
         default:
             break;

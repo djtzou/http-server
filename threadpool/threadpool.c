@@ -7,6 +7,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <pthread.h>
+#include <signal.h>
 #include "../utils/tlpi_hdr.h"
 #include "threadpool.h"
 
@@ -87,7 +88,7 @@ static void bsem_wait(bsem *bsem_p);
 
 thpool *
 thpool_init(unsigned int num_threads, unsigned int jobqueue_size)
-{   
+{
     threads_keepalive = 1;
 
     if (num_threads <= 0) {
@@ -332,7 +333,7 @@ jobqueue_add(jobqueue *jobqueue_p, job *job_p)
 static int
 thread_init(thpool *thpool_p, thread **thread_p, int id)
 {   // Must use double pointer (thread **thread) to fill entry in thpool->threads
-    
+
     *thread_p = (thread *) malloc(sizeof(**thread_p));
     if (*thread_p == NULL) {
         errMsg("thread_init(): Failed to allocate memory for thread structure");
@@ -357,6 +358,15 @@ thread_init(thpool *thpool_p, thread **thread_p, int id)
     return 0;
 }
 
+
+static void
+handle_sigpipe(int sig)
+{
+    // write() to socket returns -1 and errno == EPIPE
+    // We don't want server to terminate if client abruptly disconnects
+    errMsg("Attempting to write to a connection closed by peer");
+}
+
 static void *
 thread_start(void *arg)
 {
@@ -365,6 +375,32 @@ thread_start(void *arg)
     /* Set thread name? */
 
 
+    /* Peer may send EOF or Ctrl-C, closing its end of the connection and causing segfault if server writes to
+       the socket (ConnectionResetError) */
+    /* Unblock SIGPIPE signal. */
+    sigset_t set;
+    if (sigemptyset(&set) < 0) {
+        errMsg("thread_start(): sigemptyset()");
+    }
+
+    if (sigaddset(&set, SIGPIPE) < 0) {
+        errMsg("thread_start(): sigaddset()");
+    }
+
+    if (pthread_sigmask(SIG_UNBLOCK, &set, NULL) > 0) {
+        errMsg("thread_start(): pthread_sigmask()");
+    }
+
+    /* Register signal handler for SIGPIPE */
+	struct sigaction act;
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = 0;
+	act.sa_handler = handle_sigpipe;
+	if (sigaction(SIGPIPE, &act, NULL) == -1) {
+		errMsg("thread_start(): cannot handle SIGPIPE");
+	}
+
+    /* Assure all threads have been created before starting serving */
     thpool *thpool_p = thread_p->thpool;
 
     /* Mark thread as alive */
