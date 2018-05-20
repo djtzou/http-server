@@ -1,0 +1,14 @@
+// Remove limit for job queue?
+// Provide command line options using getopt or argp
+// Provide HEAD, POST, PUT, DELETE, OPTIONS support
+// Provide support for more HTTP status codes (and possibly static error webpages)
+// Provide CGI support
+// Provide support for common HTTP request and response header fields
+// Make server a daemon. Log error messages to a file using syslog.
+// Dynamic thread pool resizing based on workload and idleness
+// Make server stateful (sessions)
+// Support HTTP/1.1 persistent connections
+// Record per-thread and per-request usage statistics
+// Write the multi-threaded client for testing
+// Unit tests
+// Document code
